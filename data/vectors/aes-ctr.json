@@ -1,0 +1,26 @@
+[
+  {
+    "name": "NIST SP 800-38A F.5.1 CTR-AES128",
+    "source": "NIST SP 800-38A, sekcja F.5.1",
+    "key": "2b7e151628aed2a6abf7158809cf4f3c",
+    "counter": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+    "plaintext": "6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710",
+    "ciphertext": "874d6191b620e3261bef6864990db6ce9806f66b7970fdff8617187bb9fffdff5ae4df3edbd5d35e5b4f09020db03eab1e031dda2fbe03d1792170a0f3009cee"
+  },
+  {
+    "name": "RFC 3686 Test Vector #1 (AES-128, 16 B)",
+    "source": "RFC 3686, sekcja 6; blok licznika = nonce || IV || 00000001",
+    "key": "ae6852f8121067cc4bf7a5765577f39e",
+    "counter": "00000030000000000000000000000001",
+    "plaintext": "53696e676c6520626c6f636b206d7367",
+    "ciphertext": "e4095d4fb7a7b3792d6175a3261311b8"
+  },
+  {
+    "name": "RFC 3686 Test Vector #2 (AES-128, 32 B)",
+    "source": "RFC 3686, sekcja 6; blok licznika = nonce || IV || 00000001",
+    "key": "7e24067817fae0d743d6ce1f32539163",
+    "counter": "006cb6dbc0543b59da48d90b00000001",
+    "plaintext": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "ciphertext": "5104a106168a72d9790d41ee8edad388eb2e1efc46da57c8fce630df9141be28"
+  }
+]
