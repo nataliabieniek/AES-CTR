@@ -1,0 +1,6 @@
+numpy
+cryptography
+mpi4py
+pycuda
+pytest
+matplotlib

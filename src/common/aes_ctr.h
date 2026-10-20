@@ -11,6 +11,9 @@ typedef struct {
     int rounds; /* 10, 12, 14 */
 } aes_key;
 
+/* Tablica S-box (inicjalizowana przy pierwszym wywolaniu; do skopiowania na GPU). */
+const uint8_t *aes_sbox(void);
+
 /* Rozwija klucz (16/24/32 B). Zwraca 0 gdy OK. */
 int aes_key_init(aes_key *k, const uint8_t *key, size_t key_len);
 

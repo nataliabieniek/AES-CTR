@@ -1,0 +1,6 @@
+build/
+.venv/
+__pycache__/
+data/*.bin
+results/*
+!results/.gitkeep

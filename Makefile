@@ -2,7 +2,7 @@ CC      ?= gcc
 MPICC   ?= mpicc
 NVCC    ?= nvcc
 CFLAGS  ?= -O3 -std=c11 -Wall -Wextra
-COMMON  := src/common/aes_ctr.c src/common/cli.c
+COMMON  := src/common/aes_ctr.c src/common/cli.c src/common/timer.c src/common/fileio.c
 BIN     := build
 
 all: openmp mpi cuda
@@ -17,7 +17,7 @@ mpi: $(BIN)
 	$(MPICC) $(CFLAGS) src/mpi/main.c $(COMMON) -o $(BIN)/aes_ctr_mpi
 
 cuda: $(BIN)
-	$(NVCC) -O3 src/cuda/main.cu src/common/aes_ctr.c src/common/cli.c -o $(BIN)/aes_ctr_cuda
+	$(NVCC) -O3 src/cuda/main.cu $(COMMON) -o $(BIN)/aes_ctr_cuda
 
 clean:
 	rm -rf $(BIN)
