@@ -1,9 +1,8 @@
-/* OpenMP: watki dostaja rozlaczne zakresy blokow wraz z licznikami.
- * Rownoleglosc obliczen (OpenMP) jest oddzielona od buforowania pliku (watek I/O).
- *
- * Wersja 1 osoby: synchronicznie  read -> compute -> write.
- * Wersja 2 osob : podwojne buforowanie - podczas liczenia bufora k czytamy bufor k+1
- *                 i zapisujemy bufor k-1. */
+/* AES-CTR, wersja OpenMP.
+ * Watki dostaja rozlaczne zakresy blokow (a wiec i licznikow); odczyt i zapis
+ * pliku robi watek glowny poza sekcja rownolegla.
+ * --double 1 (podwojne buforowanie, zakres 2 osob) - TODO, na razie dziala jak 0.
+ * Deszyfrowanie = ten sam program (CTR jest symetryczny). */
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,17 +11,17 @@
 #include "../common/fileio.h"
 #include "../common/timer.h"
 
-/* Szyfruje bufor rownolegle; first_block = globalny numer pierwszego bloku bufora
- * (offset_w_pliku / 16). Bufor (poza ostatnim) ma dlugosc podzielna przez 16. */
+/* first_block = globalny numer pierwszego bloku bufora (offset / 16).
+ * schedule(static) bez chunk: kazdy watek dostaje jeden ciagly zakres blokow. */
 static void process_buffer(const aes_key *key, const cli_args *a, uint64_t first_block,
                            const uint8_t *in, uint8_t *out, size_t n) {
-    /* TODO 1: nblk = (n + 15) / 16
-     * TODO 2: #pragma omp parallel for schedule(static) po blokach (albo: kazdy watek
-     *         dostaje jeden ciagly zakres blokow = rozlaczne zakresy licznikow)
-     * TODO 3: w petli wywolaj aes_ctr_xcrypt(key, a->counter, first_block + b_start,
-     *         in + b_start*16, out + b_start*16, len) - len < 16 tylko dla ostatniego bloku
-     * UWAGA: tu NIE mierz czasu i NIE printuj - czas mierzy main wokol wywolania. */
-    (void)key; (void)a; (void)first_block; (void)in; (void)out; (void)n;
+    const int64_t nblk = (int64_t)((n + AES_BLOCK - 1) / AES_BLOCK);
+#pragma omp parallel for schedule(static)
+    for (int64_t b = 0; b < nblk; b++) {
+        size_t off = (size_t)b * AES_BLOCK;
+        size_t len = n - off < AES_BLOCK ? n - off : AES_BLOCK; /* < 16 tylko w ostatnim bloku */
+        aes_ctr_xcrypt(key, a->counter, first_block + (uint64_t)b, in + off, out + off, len);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -31,43 +30,102 @@ int main(int argc, char **argv) {
     run_stats st;
     stats_reset(&st);
 
-    /* KROK 1: konfiguracja (poza pomiarem)
-     *   - omp_set_num_threads(a.threads) gdy a.threads > 0
-     *   - aes_key_init(&key, a.key, a.key_len)
-     *   - size = file_size(a.in_path); cli_check_counter_range(&a, (size + 15) / 16)
-     *   - file_open wejscia ("rb") i wyjscia ("wb")
-     *   - malloc buforow: wersja 1 osoby: in[1], out[1];
-     *     wersja 2 osob: in[2], out[2] (kazdy a.buffer_size)
-     */
+    /* KROK 1: konfiguracja poza pomiarem */
+    if (a.threads > 0) omp_set_num_threads(a.threads);
+    if (a.double_buffer)
+        fprintf(stderr, "Uwaga: --double 1 jeszcze niezaimplementowane, uzywam buforow synchronicznych.\n");
 
-    /* KROK 2: start pomiaru calego potoku: t_total = now_sec()  (tuz przed 1. odczytem) */
+    aes_key key;
+    if (aes_key_init(&key, a.key, a.key_len)) {
+        fprintf(stderr, "Blad: niepoprawny klucz.\n");
+        return 1;
+    }
+    int64_t size = file_size(a.in_path);
+    if (size < 0) {
+        perror(a.in_path);
+        return 1;
+    }
+    if (cli_check_counter_range(&a, ((uint64_t)size + AES_BLOCK - 1) / AES_BLOCK)) return 1;
 
-    /* KROK 3A (1 osoba, a.double_buffer == 0, synchronicznie), petla po buforach, off = offset w pliku:
-     *   t = now_sec(); n = file_read_at(fi, off, in, buffer); st.read_s += now_sec() - t;
-     *   if (n == 0) break;
-     *   t = now_sec(); process_buffer(&key, &a, off/16, in, out, n); st.kernel_s += now_sec() - t;
-     *   t = now_sec(); file_write_at(fo, off, out, n); st.write_s += now_sec() - t;
-     *   off += n; st.bytes += n;
-     */
+    FILE *fi = file_open(a.in_path, "rb");
+    if (!fi) return 1;
+    FILE *fo = file_open(a.out_path, "wb");
+    if (!fo) {
+        fclose(fi);
+        return 1;
+    }
 
-    /* KROK 3B (2 osoby, a.double_buffer == 1, podwojne buforowanie):
-     *   - #pragma omp parallel sections (lub 2 taski): jedna sekcja = I/O, druga = obliczenia
-     *   - indeks bufora k%2: w czasie gdy process_buffer liczy bufor k,
-     *       watek I/O czyta bufor k+1 do drugiego bufora wejsciowego
-     *       oraz zapisuje wynik bufora k-1 z drugiego bufora wyjsciowego
-     *   - synchronizacja na granicy buforow (#pragma omp barrier / zmienne gotowosci)
-     *   - st.kernel_s nadal = suma czasow process_buffer; total_s bedzie krotszy niz
-     *     read+kernel+write - to efekt nakladania
-     */
+    uint8_t *in = malloc(a.buffer_size);
+    uint8_t *out = malloc(a.buffer_size);
+    if (!in || !out) {
+        fprintf(stderr, "Blad: brak pamieci na bufory.\n");
+        free(in);
+        free(out);
+        fclose(fi);
+        fclose(fo);
+        return 1;
+    }
 
-    /* KROK 4: koniec potoku: st.total_s = now_sec() - t_total;
-     *         dopiero TERAZ zamknij pliki, zwolnij pamiec i wypisz:
-     *         stats_report(&st, "openmp", omp_get_max_threads(), a.buffer_size);
-     */
-    /* KROK 5: DESZYFROWANIE = ten sam program (CTR jest symetryczny): uruchom z --in zaszyfrowany
-     *         --out odszyfrowany, ten sam klucz i --counter. Brak osobnego kodu; w main ewentualnie
-     *         tylko komunikat. Weryfikacja bajt po bajcie: python/verify.py (porownanie z oryginalem).
-     */
-    (void)process_buffer;
-    return 0;
+    /* Rozgrzewka: tworzenie puli watkow nie powinno wliczac sie do kernel_s. */
+#pragma omp parallel
+    { (void)0; }
+
+    /* KROK 2-3: pomiar calego potoku, synchronicznie read -> compute -> write */
+    double t_total = now_sec();
+    int rc = 0;
+    uint64_t off = 0;
+    while (off < (uint64_t)size) {
+        size_t expected = (uint64_t)a.buffer_size < (uint64_t)size - off
+                              ? a.buffer_size
+                              : (size_t)((uint64_t)size - off);
+        double t = now_sec();
+        size_t n = file_read_at(fi, off, in, expected);
+        st.read_s += now_sec() - t;
+        if (n != expected) {
+            fprintf(stderr, "Blad odczytu: oczekiwano %zu B, odczytano %zu B.\n", expected, n);
+            rc = 1;
+            break;
+        }
+
+        t = now_sec();
+        process_buffer(&key, &a, off / AES_BLOCK, in, out, n);
+        st.kernel_s += now_sec() - t;
+
+        t = now_sec();
+        size_t w = file_write_at(fo, off, out, n);
+        st.write_s += now_sec() - t;
+        if (w != n) {
+            fprintf(stderr, "Blad zapisu: oczekiwano %zu B, zapisano %zu B.\n", n, w);
+            rc = 1;
+            break;
+        }
+
+        off += n;
+        st.bytes += n;
+    }
+    /* fflush przed koncem pomiaru, zeby zapis z bufora stdio wliczyl sie do total_s */
+    if (fflush(fo) != 0) {
+        perror("Blad oprozniania bufora wyjsciowego");
+        rc = 1;
+    }
+    st.total_s = now_sec() - t_total;
+
+    /* KROK 4: sprzatanie i raport */
+    if (fclose(fo) != 0) {
+        perror("Blad zamykania pliku wyjsciowego");
+        rc = 1;
+    }
+    if (fclose(fi) != 0) {
+        perror("Blad zamykania pliku wejsciowego");
+        rc = 1;
+    }
+    free(in);
+    free(out);
+    if (!rc && st.bytes != (uint64_t)size) {
+        fprintf(stderr, "Blad: przetworzono %llu z %lld B.\n",
+                st.bytes, (long long)size);
+        rc = 1;
+    }
+    if (!rc) stats_report(&st, "openmp", omp_get_max_threads(), a.buffer_size);
+    return rc;
 }
