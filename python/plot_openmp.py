@@ -80,7 +80,7 @@ def human(n):
 def plot_scaling(groups, out):
     """S(p) = T(1)/T(p), E(p) = S(p)/p; T(1) = mediana czasu tego samego potoku na 1 watku."""
     fig, axes = plt.subplots(2, 2, figsize=(10, 7.5), sharex=True)
-    for col, (field, title) in enumerate((("kernel_s", "jądro AES-CTR"), ("total_s", "cały potok (z odczytem i zapisem)"))):
+    for col, (field, title) in enumerate((("kernel_s", "jądro AES-CTR"), ("total_s", "cały potok (z I/O)"))):
         threads = []
         for mode in MODES:
             base = groups.get(("threads", mode, 1))

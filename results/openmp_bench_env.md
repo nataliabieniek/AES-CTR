@@ -1,0 +1,8 @@
+- platform: macOS-27.2.1-arm64-arm-64bit
+- machine: arm64
+- logical_cpus: 10
+- python: 3.9.6
+- cpu: Apple M5
+- performance_cores: 4
+- efficiency_cores: 6
+- memory_bytes: 34359738368
