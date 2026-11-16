@@ -8,10 +8,11 @@ Równoległe szyfrowanie/deszyfrowanie plików AES-CTR w trzech wersjach: **Open
 |---|---|
 | `src/common/` (AES-128/192/256, CLI, I/O, czas, GB/s) | gotowe, zweryfikowane z `cryptography` |
 | `src/cuda/main.cu` | gotowe: tryb pojedynczy i podwójne buforowanie (`--double 1`) |
-| `src/openmp/main.c` | tryb pojedynczy gotowy; **`--double 1` do zrobienia** (na razie liczy synchronicznie) |
+| `src/openmp/main.c` | gotowe: tryb pojedynczy i podwójne buforowanie (`--double 1`); testy w `tests/test_openmp.py` |
 | `src/mpi/main.c` | **szablon z TODO** (do zrobienia) |
 | Dane testowe, wektory NIST/RFC, `verify.py`, skrypt `run_all.sh` | gotowe |
-| Benchmarki (wpływ rozmiaru bufora i pliku), raport | do zrobienia |
+| Benchmarki OpenMP (`python/bench_openmp.py`, `python/plot_openmp.py`) | gotowe (sekcja 4.5) |
+| Benchmarki MPI i CUDA, raport | do zrobienia |
 
 ## 2. Struktura
 - `src/common/` – wspólny kod: `aes_ctr.c` (AES-CTR), `cli.c` (argumenty), `fileio.c` (I/O z offsetem), `timer.c` (czas i raport GB/s)
@@ -74,7 +75,7 @@ bash scripts/run_all.sh -v openmp -d 0 -t 8        # OpenMP, 8 wątków
 bash scripts/run_all.sh -v mpi -t 4                # MPI, 4 procesy
 bash scripts/run_all.sh -b 65536 -f data/file_100MB.bin   # inny bufor, jeden plik
 ```
-Uwaga: dopóki OpenMP nie ma podwójnego buforowania, `-d 1` daje dla niego to samo co `-d 0` (program wypisuje ostrzeżenie); MPI jest szablonem i dopóki nie zostanie zaimplementowane, jego wyniki są nieprawidłowe.
+Uwaga: MPI jest szablonem i dopóki nie zostanie zaimplementowane, jego wyniki są nieprawidłowe.
 
 ### 4.2. Pojedyncze polecenia
 Klucz i licznik poniżej są przykładowe.
@@ -108,6 +109,18 @@ aes_ctr_<wersja> --in PLIK --out PLIK --key HEX(32|48|64) --counter HEX(32) [--b
 
 ### 4.4. Wynik programu
 Jedna linia `klucz=wartość`: czasy faz (`read_s`, `h2d_s`, `kernel_s`, `d2h_s`, `write_s`, `total_s`), `kernel_GBps` (sam rdzeń) i `total_GBps` (cały potok). Pomiar jest tylko akumulowany w `run_stats` i wypisywany po zakończeniu pracy, więc nie zaburza szyfrowania. Przy podwójnym buforowaniu `total_s` jest mniejsze niż suma faz (fazy się nakładają).
+
+### 4.5. OpenMP: budowanie poza Dockerem, testy i pomiary
+OpenMP nie wymaga Dockera. Na macOS `gcc` to Apple clang bez `-fopenmp`, więc potrzebny jest gcc z Homebrew (`brew install gcc`):
+```
+make openmp CC=gcc-16                 # numer wersji: ls $(brew --prefix)/bin/gcc-*
+pytest tests/test_openmp.py           # wektory NIST/RFC, zgodność z biblioteką, round-trip, oba tryby --double
+python python/bench_openmp.py         # rozgrzewka + 5 pomiarów każdej konfiguracji -> results/openmp_bench.csv
+python python/plot_openmp.py          # mediany i rozrzut -> results/plots/openmp_*.png, results/openmp_summary.csv
+```
+`bench_openmp.py` mierzy trzy serie: liczbę wątków (S(p), E(p)), rozmiar bufora i rozmiar pliku, każdą dla trzech potoków: `sync-static`, `sync-dynamic` i `double`. Konfigurację maszyny zapisuje do `results/openmp_bench_env.md`.
+
+Sposób przydziału bloków w trybie `--double 0` wybiera zmienna `OMP_SCHEDULE` (domyślnie `static`), np. `OMP_SCHEDULE=dynamic,256 ./build/aes_ctr_openmp ...`.
 
 ## 5. Dla piszących kod
 
