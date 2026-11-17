@@ -1,0 +1,4 @@
+- platform: Linux-6.6.87.1-microsoft-standard-WSL2-x86_64-with-glibc2.35
+- machine: x86_64
+- logical_cpus: 6
+- python: 3.10.12

@@ -1,0 +1,6 @@
+- platform: Linux-6.6.87.1-microsoft-standard-WSL2-x86_64-with-glibc2.35
+- machine: x86_64
+- logical_cpus: 6
+- python: 3.10.12
+- gpu: NVIDIA GeForce RTX 3060, 610.88, 12288 MiB, 4, 16
+- nvcc: Build cuda_12.4.r12.4/compiler.34097967_0

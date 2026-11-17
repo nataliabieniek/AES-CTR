@@ -12,7 +12,8 @@ Równoległe szyfrowanie/deszyfrowanie plików AES-CTR w trzech wersjach: **Open
 | `src/mpi/main.c` | **szablon z TODO** (do zrobienia) |
 | Dane testowe, wektory NIST/RFC, `verify.py`, skrypt `run_all.sh` | gotowe |
 | Benchmarki OpenMP (`python/bench_openmp.py`, `python/plot_openmp.py`) | gotowe (sekcja 4.5) |
-| Benchmarki MPI i CUDA, raport | do zrobienia |
+| Testy i benchmarki CUDA (`tests/test_cuda.py`, `python/bench_cuda.py`, `python/plot_cuda.py`) | gotowe do uruchomienia (sekcja 4.6); wyniki do wygenerowania na GPU |
+| Benchmarki MPI, raport | do zrobienia |
 
 ## 2. Struktura
 - `src/common/` – wspólny kod: `aes_ctr.c` (AES-CTR), `cli.c` (argumenty), `fileio.c` (I/O z offsetem), `timer.c` (czas i raport GB/s)
@@ -121,6 +122,16 @@ python python/plot_openmp.py          # mediany i rozrzut -> results/plots/openm
 `bench_openmp.py` mierzy trzy serie: liczbę wątków (S(p), E(p)), rozmiar bufora i rozmiar pliku, każdą dla trzech potoków: `sync-static`, `sync-dynamic` i `double`. Konfigurację maszyny zapisuje do `results/openmp_bench_env.md`.
 
 Sposób przydziału bloków w trybie `--double 0` wybiera zmienna `OMP_SCHEDULE` (domyślnie `static`), np. `OMP_SCHEDULE=dynamic,256 ./build/aes_ctr_openmp ...`.
+
+### 4.6. CUDA: testy i pomiary
+Wymaga GPU NVIDIA i `nvcc` (w kontenerze Docker):
+```
+make cuda
+pytest tests/test_cuda.py             # wektory NIST/RFC, zgodność z biblioteką, round-trip, oba tryby --double
+python3 python/bench_cuda.py          # rozgrzewka + 5 pomiarów każdej konfiguracji -> results/cuda_bench.csv
+python3 python/plot_cuda.py           # mediany i rozrzut -> results/plots/cuda_*.png, results/cuda_summary.csv
+```
+`bench_cuda.py` mierzy rozmiar partii (bufora) i rozmiar pliku dla dwóch potoków: `sync` (`--double 0`) i `double` (`--double 1`). Zapisuje czasy H2D, kernela i D2H oraz GB/s samego jądra i całego potoku; konfigurację GPU zapisuje do `results/cuda_bench_env.md`. `plot_cuda.py` rysuje też podział czasu na fazy (`cuda_phases.png`).
 
 ## 5. Dla piszących kod
 
