@@ -1,0 +1,6 @@
+# Przyklad hostfile dla MPI na kilku maszynach: mpirun --hostfile scripts/hosts.example -n 2 ...
+# Kazda maszyna musi miec ta sama wersje OpenMPI, SSH bez hasla i binarke aes_ctr_mpi pod ta sama
+# sciezka (BeagleBone: zbuduj `make mpi` na nim samym, to ARM). Rank 0 = pierwszy wpis (tu laptop).
+# Zamien adresy i liczbe slotow (rdzeni) na swoje.
+192.168.0.10 slots=1
+192.168.0.20 slots=1

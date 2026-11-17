@@ -9,7 +9,7 @@ Równoległe szyfrowanie/deszyfrowanie plików AES-CTR w trzech wersjach: **Open
 | `src/common/` (AES-128/192/256, CLI, I/O, czas, GB/s) | gotowe, zweryfikowane z `cryptography` |
 | `src/cuda/main.cu` | gotowe: tryb pojedynczy i podwójne buforowanie (`--double 1`) |
 | `src/openmp/main.c` | gotowe: tryb pojedynczy i podwójne buforowanie (`--double 1`); testy w `tests/test_openmp.py` |
-| `src/mpi/main.c` | **szablon z TODO** (do zrobienia) |
+| `src/mpi/main.c` | gotowe: procesy na jednej maszynie i kilka maszyn (hostfile, wagi rang); testy w `tests/test_mpi.py`; pomiar na BeagleBone do zrobienia (sekcja 4.7) |
 | Dane testowe, wektory NIST/RFC, `verify.py`, skrypt `run_all.sh` | gotowe |
 | Benchmarki OpenMP (`python/bench_openmp.py`, `python/plot_openmp.py`) | gotowe (sekcja 4.5) |
 | Testy i benchmarki CUDA (`tests/test_cuda.py`, `python/bench_cuda.py`, `python/plot_cuda.py`) | gotowe do uruchomienia (sekcja 4.6); wyniki do wygenerowania na GPU |
@@ -76,7 +76,6 @@ bash scripts/run_all.sh -v openmp -d 0 -t 8        # OpenMP, 8 wątków
 bash scripts/run_all.sh -v mpi -t 4                # MPI, 4 procesy
 bash scripts/run_all.sh -b 65536 -f data/file_100MB.bin   # inny bufor, jeden plik
 ```
-Uwaga: MPI jest szablonem i dopóki nie zostanie zaimplementowane, jego wyniki są nieprawidłowe.
 
 ### 4.2. Pojedyncze polecenia
 Klucz i licznik poniżej są przykładowe.
@@ -132,6 +131,30 @@ python3 python/bench_cuda.py          # rozgrzewka + 5 pomiarów każdej konfigu
 python3 python/plot_cuda.py           # mediany i rozrzut -> results/plots/cuda_*.png, results/cuda_summary.csv
 ```
 `bench_cuda.py` mierzy rozmiar partii (bufora) i rozmiar pliku dla dwóch potoków: `sync` (`--double 0`) i `double` (`--double 1`). Zapisuje czasy H2D, kernela i D2H oraz GB/s samego jądra i całego potoku; konfigurację GPU zapisuje do `results/cuda_bench_env.md`. `plot_cuda.py` rysuje też podział czasu na fazy (`cuda_phases.png`).
+
+### 4.7. MPI: procesy i kilka maszyn
+Plik czyta i zapisuje tylko rank 0 (`Scatterv` rozsyła partię, `Gatherv` zbiera wynik), więc pozostałe maszyny nie potrzebują dostępu do plików. `h2d_s` to dystrybucja, `d2h_s` zbieranie, a czasy faz to maksimum po rangach.
+
+Procesy na jednej maszynie (w kontenerze):
+```
+make mpi
+pytest tests/test_mpi.py
+mpirun --allow-run-as-root --oversubscribe -n 4 ./build/aes_ctr_mpi --in data/file_10MB.bin --out results/10MB.enc --key $K --counter $C
+```
+Kilka maszyn (np. BeagleBone): na każdej zbuduj `make mpi` (ta sama wersja OpenMPI, SSH bez hasła, ta sama ścieżka do binarki), skopiuj `scripts/hosts.example` i wpisz adresy:
+```
+AES_MPI_WEIGHTS=6,1 mpirun --hostfile hosts -x AES_MPI_WEIGHTS -n 2 ./build/aes_ctr_mpi --in ... --out ... --key $K --counter $C
+```
+`AES_MPI_WEIGHTS` to wagi rang (domyślnie równe): wolniejsza maszyna dostaje proporcjonalnie mniejszy zakres każdej partii. `--buffer` musi być mniejszy niż 2 GiB.
+
+Pomiary i wykresy:
+```
+python3 python/bench_mpi.py           # liczba procesów, rozmiar partii i pliku, sync vs double -> results/mpi_bench.csv
+python3 python/plot_mpi.py            # -> results/plots/mpi_{scaling,buffer,filesize,phases}.png, results/mpi_summary.csv
+python3 python/bench_mpi.py --hostfile hosts --procs 2 --weights 6,1 --out results/mpi_nodes_bench.csv   # kilka maszyn
+python3 python/plot_mpi.py results/mpi_nodes_bench.csv
+```
+`mpi_phases.png` pokazuje koszt dystrybucji i zbierania względem szyfrowania.
 
 ## 5. Dla piszących kod
 
